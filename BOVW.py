@@ -1,79 +1,67 @@
+import numpy as np
+import pickle
+import cv2
+import os
+from matplotlib import pyplot as plt
+from sklearn.cluster import KMeans
 
-#This function will sample SIFT descriptors from the training images,
-#cluster them with kmeans, and then return the cluster centers.
-
-def build_vocabulary(image_paths, vocab_size):
+def build_vocabulary(image_paths, vocab_size, s_descriptors=400):
     
+    all_descriptors = []
+    sift = cv2.SIFT_create() # Create SIFT detector/descriptor
+    print(f"Extracting up to {s_descriptors} SIFT features per image...")
+    
+    for path in image_paths:
+        try:
+            # Load image in grayscale
+            img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            
+            if img is None:
+                continue
+
+            # Detect keypoints and compute SIFT descriptors
+            kp, des = sift.detectAndCompute(img, None)
+            
+            if des is not None and des.shape[0] > 0:
+                # Randomly sample 's_descriptors' features if more are found
+                if des.shape[0] > s_descriptors:
+                    indices = np.random.choice(des.shape[0], size=s_descriptors, replace=False)
+                    des = des[indices, :]
+                
+                all_descriptors.append(des)
+                
+        except Exception as e:
+            print(f"Error processing image {path}: {e}")
+            continue
+
+    # Combine all descriptors into a single large matrix
+    if not all_descriptors:
+        print("Warning: No descriptors were successfully extracted.")
+        return np.empty((vocab_size, 128))
+        
+    X = np.concatenate(all_descriptors, axis=0).astype(np.float32)
+    print(f"Total descriptors collected: {X.shape[0]}")
+    
+    # Cluster with K-Means
+    print(f"Clustering with K-Means (k={vocab_size})...")
+    kmeans = KMeans(n_clusters=vocab_size, random_state=42, n_init='auto', verbose=0)
+    kmeans.fit(X)
+
+    vocab = kmeans.cluster_centers_  # vocab_size x 128 array
+    
+    # Save Vocabulary
+    filename = f'features/vocab_size_{vocab_size}.pkl'
+    try:
+        with open(filename, 'wb') as f:
+            pickle.dump(vocab, f)
+        print(f"Vocabulary saved to {filename}")
+    except FileNotFoundError:
+        print("Warning: Could not save vocabulary. Ensure 'features/' directory exists.")
+
+
     return vocab
-# The inputs are 'image_paths', a N x 1 cell array of image paths, and
-# 'vocab_size' the size of the vocabulary.
-
-# The output 'vocab' should be vocab_size x 128. Each row is a cluster
-# centroid / visual word.
-
-
-# Load images from the training set. To save computation time, you don't
-# necessarily need to sample from all images, although it would be better
-# to do so. You can randomly sample the descriptors from each image to save
-# memory and speed up the clustering. 
-
-# For each loaded image, get some SIFT features. You don't have to get as
-# many SIFT features as you will in get_bags_of_sift, because you're only
-# trying to get a representative sample here.
-
-# Once you have tens of thousands of SIFT features from many training
-# images, cluster them with kmeans. The resulting centroids are now your
-# visual word vocabulary.
 
 
 
-
-def get_bags_of_sifts(image_paths):
-    
-# Use SIFT from Open-CV library refer to the code below for help and update perameters
-# to install open-cv use following commands
-# pip install opencv-python
-# pip install opencv-contrib-python
-
-#     sift = cv2.xfeatures2d.SIFT_create(30) #specify how many maximum descriptors you want in the output 
-#     im = Image.open(img_path)
-#     im.thumbnail(self.out_size, Image.ANTIALIAS) 
-#     img = np.array(im)
-
-#     kp, des = sift.detectAndCompute(img, None)
-    
-    # vocab = pickle.load('vocab.pkl')
-    # vocab_size = 
-    
-    
-    
-    
-    
+def get_bags_of_sifts(image_paths, vocab_path):
     return image_feats
-
-# image_paths is an N x 1 cell array of strings where each string is an
-# image path on the file system.
-
-# This function assumes that 'vocab.pkl' exists and contains an N x 128
-# matrix 'vocab' where each row is a kmeans centroid or visual word. This
-# matrix is saved to disk rather than passed in a parameter to avoid
-# recomputing the vocabulary in every run.
-
-# image_feats is an N x d matrix, where d is the dimensionality of the
-# feature representation. In this case, d will equal the number of clusters
-# or equivalently the number of entries in each image's histogram
-# ('vocab_size') below.
-
-# You will want to construct SIFT features here in the same way you
-# did in build_vocabulary function (except for possibly changing the sampling
-# rate) and then assign each local feature to its nearest cluster center
-# and build a histogram indicating how many times each cluster was used.
-# Don't forget to normalize the histogram, or else a larger image with more
-# SIFT features will look very different from a smaller version of the same
-# image.
-
-#  SIFT_features is a 128 x N matrix of SIFT features
-#   note: there are smoothing parameters you can manipulate for sift function
-
-
-

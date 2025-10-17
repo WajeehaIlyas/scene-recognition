@@ -9,7 +9,8 @@ import pickle
 import utils
 import os
 from BOVW import build_vocabulary, get_bags_of_sifts, visualize_sift_keypoints, plot_histogram
-
+from KNN import nearest_neighbor_classify
+from SVM import svm_classify
 
 # =========================================================
 # Step 0: Setup parameters, paths, and category info
@@ -18,7 +19,7 @@ from BOVW import build_vocabulary, get_bags_of_sifts, visualize_sift_keypoints, 
 
 # 'resnet18'
 FEATURE = 'bag of sift'
-CLASSIFIER = 'placeholder'  # options: 'nearest neighbor', 'support vector machine'
+CLASSIFIER = 'test all'  # options: 'nearest neighbor', 'support vector machine'
 
 data_path = data_path = '/home/wajeeha/Documents/scene-recognition-using-bow-and-resnet-WajeehaIlyas/data/'
 
@@ -90,51 +91,36 @@ if FEATURE == 'resnet':
 elif FEATURE == 'bag of sift':
     VOCAB_SIZE_FINAL = 20
     VOCAB_PATH = f'features/vocab_size_{VOCAB_SIZE_FINAL}.pkl'
-    
-    # Ensure the features directory exists for saving files
+
     if not os.path.exists('features'):
         os.makedirs('features')
 
-    # 2. Build Vocabulary if it doesn't exist
-    # Use os.path.exists to check for the .pkl file
+    # Build Vocabulary if it doesn't exist
     if not os.path.exists(VOCAB_PATH):
         print(f'No existing visual word vocabulary found at {VOCAB_PATH}. Computing one from training images\n')
         
-        # NOTE: If you must test multiple vocab_sizes, you would loop here 
-        # or call build_vocabulary multiple times, saving each one.
         vocab = build_vocabulary(train_image_paths, VOCAB_SIZE_FINAL) 
-        
-        # build_vocabulary already handles saving the .pkl file internally.
         
     else:
         print(f'Loading existing visual word vocabulary from {VOCAB_PATH}\n')
      
-    # 3. Code get_bags_of_sifts function (This will also save the 'all_sampled_descriptors_for_report.pkl')
-    # Pass the image paths AND the vocabulary path to your implemented function
     train_image_feats = get_bags_of_sifts(train_image_paths, VOCAB_PATH) 
     test_image_feats  = get_bags_of_sifts(test_image_paths, VOCAB_PATH)
 
     if train_image_feats is None or train_image_feats.size == 0:
         print("CRITICAL ERROR: Feature extraction failed. Cannot proceed to classification/results.")
-        # Avoid running the rest of the script that depends on features
         exit()
 
-    # 4. Visualization for Report (Optional but required in the project description)
     print("Generating sample visualizations for the report...")
     
-    # A. Visualize SIFT keypoints for a sample image per class
-    # Get a single example path for each category for visualization
     sample_paths = {}
     for path, label in zip(train_image_paths, train_labels):
         if label not in sample_paths:
             sample_paths[label] = path
             
-    # Visualize SIFT for one image per class (max 15 images)
     for label, path in sample_paths.items():
         visualize_sift_keypoints(path)
         
-    # B. Plot Histograms for a few sample images (e.g., the first from each set)
-    # Ensure train_image_feats and test_image_feats are not None
     if train_image_feats is not None:
         plot_histogram(train_image_feats[0], train_labels[0], VOCAB_SIZE_FINAL, 'results/histograms_train_0')
     if test_image_feats is not None:
@@ -148,26 +134,43 @@ elif FEATURE == 'placeholder':
 else:
     print("Unknown feature type")
 
-
-
-
 # =========================================================
 # Step 2: Train Classifier and Predict
 # =========================================================
 
-# Classify each test image by training and using the appropriate classifier
-#  to classify test features should return an N x 1 cell array,
-# where N is the number of test cases and each entry is a string indicating
-# the predicted category for each test image. Each entry in
-# 'predicted_categories' must be one of the 15 strings in 'categories',
-# 'train_labels', and 'test_labels'. See the starter code for each function
-# for more details.
+if CLASSIFIER == 'test all':
+    
+    k_values = [1, 5, 10] 
+    
+    for k in k_values:
+        print(f"\n--- Running k-NN Classifier (k={k}) ---")
+        
+        predicted_categories = nearest_neighbor_classify(
+            train_image_feats, 
+            train_labels, 
+            test_image_feats, 
+            k=k
+        )
+        
+        print(f"\nResults for k-NN (k={k}):")
+        display_results(test_labels, categories, predicted_categories)
+   
+    print("\n--- Running Linear SVM Classifier ---")
 
-
-print('Using', CLASSIFIER, 'classifier to predict test set categories\n')
-
-if CLASSIFIER == 'nearest neighbor':
-    predicted_categories = nearest_neighbor_classify(train_image_feats, train_labels, test_image_feats)
+    svm_model_path = 'results/linear_svm_bovw.pkl'
+    
+    predicted_categories = svm_classify(
+        train_image_feats, 
+        train_labels, 
+        test_image_feats,
+        model_save_path=svm_model_path
+    )
+    
+    print("\nResults for Linear SVM:")
+    display_results(test_labels, categories, predicted_categories)
+    
+elif CLASSIFIER == 'nearest neighbor':
+    predicted_categories = nearest_neighbor_classify(train_image_feats, train_labels, test_image_feats, k=5) # Default k=5
 
 elif CLASSIFIER == 'support vector machine':
     predicted_categories = svm_classify(train_image_feats, train_labels, test_image_feats)
@@ -178,6 +181,18 @@ elif CLASSIFIER == 'placeholder':
 
 else:
     print("Unknown classifier type")
+
+
+# =========================================================
+# Step 3: Display results (The last part of main.py)
+# =========================================================
+
+# NOTE: Since the results are now displayed within the 'test all' loop, 
+# you should remove or comment out the final standalone display_results() call 
+# at the very bottom of the file to prevent errors or double plotting.
+# If you leave it, make sure the final `predicted_categories` variable 
+# contains the SVM results to be consistent with the assignment structure.
+# For simplicity, let's assume you remove the final display call.
 
 
 
@@ -193,4 +208,3 @@ else:
 # for this assignment.
 
 # This function will plot confusion matrix and accuracy of your model
-display_results(test_labels, categories, predicted_categories) #given in utils.py

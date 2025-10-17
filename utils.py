@@ -8,7 +8,6 @@ import os
 import glob
 
 def get_image_paths(data_path, categories):
-    # --- TRAINING SET: data/train/train/Category/ ---
     train_image_paths, train_labels = [], []
     train_base_path = data_path + 'train/train/' 
 
@@ -16,8 +15,6 @@ def get_image_paths(data_path, categories):
         search_path = train_base_path + cat + '/*'
         
         if os.path.isdir(train_base_path + cat):
-            # No need for this print if the code works, but keep for final confirmation
-            # print(f"DEBUG: Searching for train images in: {search_path}") 
             pass
         
         imgs = glob.glob(search_path)
@@ -25,24 +22,15 @@ def get_image_paths(data_path, categories):
         train_image_paths = train_image_paths + imgs
         train_labels = train_labels + [cat]*len(imgs)
 
-
-    # --- TESTING SET: data/test/test/Category/ ---
     test_image_paths, test_labels = [], []
     test_base_path = data_path + 'test/test/'
-    
-    # FIX: Only iterate over the folders that exist in the test set.
-    # This ensures we only look for images in the 4 folders (Bedroom, Highway, etc.)
-    # that are actually present inside data/test/test/
     test_categories = os.listdir(test_base_path)
     
     for cat in test_categories: 
-        # Skip files/folders that are not the image categories
         if cat not in categories: 
             continue 
             
         search_path = test_base_path + cat + '/*' 
-        
-        # print(f"DEBUG: Searching for test images in: {search_path}")
         
         imgs = glob.glob(search_path)
             
@@ -63,7 +51,7 @@ def plot_confusion_matrix(y_true, y_pred, classes, normalize=False, title=None, 
             title = 'Confusion matrix, without normalization'
 
     # Compute confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+    cm = confusion_matrix(y_true, y_pred, labels=classes)
     # Only use the labels that appear in the data
     #classes = classes[unique_labels(y_true, y_pred)]
     if normalize:
@@ -115,32 +103,56 @@ def perf_measure(y_actual, y_hat):
 
     return [TP, FP, TN, FN]
 
+
 def display_results(test_labels, categories, predicted_categories):
 
     df = pd.DataFrame(columns= ['Category']+list(categories))
 
     cols = ['Category']+['TP', 'FP', 'TN', 'FN']
     df = pd.DataFrame(columns= cols)
+    
+    # 1. (No change needed here) Calculate metrics per category
     for el in categories:
         temp_y_test = (test_labels == el).astype(int)
         temp_preds = (predicted_categories == el).astype(int)
         row = [el]+ perf_measure(temp_y_test, temp_preds)
         df = df._append(pd.Series(row, index=cols), ignore_index=True)
     print(df, '\n\n')
+    
+    # Identify the unique categories ACTUALLY present in the test set (y_true)
+    present_categories = np.unique(test_labels)
+    
+    # Create the mapping for ONLY the categories that need to be plotted
+    class_to_int = {cat: i for i, cat in enumerate(present_categories)}
 
-    for i in range(len(categories)):
-        test_labels[test_labels==categories[i]] = i
-        predicted_categories[predicted_categories==categories[i]] = i
-    test_labels, predicted_categories = test_labels.astype(int), predicted_categories.astype(int)
-
-    class_names=np.array(categories)
+    # Convert the label arrays using ONLY the present categories
+    temp_test_labels = np.array([class_to_int[lab] for lab in test_labels])
+    temp_predicted_categories = np.array([class_to_int.get(lab, -1) for lab in predicted_categories])
+    
+    # If a predicted category is not in the test set, it's irrelevant and gets a placeholder (-1)
+    # Filter out these placeholder predictions to ensure array sizes match
+    mask = temp_predicted_categories != -1
+    temp_predicted_categories = temp_predicted_categories[mask]
+    temp_test_labels = temp_test_labels[mask]
+    
+    # Reset categories to be the PRESENT_CATEGORIES for plotting
+    class_names = present_categories # <--- Use only the categories present in y_true
+    
+    class_names = present_categories # Use only present categories
+    
+    
+    # 3. Define class_names as the PRESENT categories (y_true) for the plotter.
+    present_categories = np.unique(test_labels) # Categories present in y_true
+    class_names = present_categories 
+    
+    # 4. Call the plotter.
     plot_confusion_matrix(test_labels, predicted_categories, classes=class_names)
     fig = plt.gcf()
     fig.show()
     
-    f1 = f1_score(y_pred=predicted_categories, y_true=test_labels,average='macro') #you need to put your own array names here
+    # 5. Fix f1_score call to use string labels and specify all 15 categories.
+    all_categories = np.array(categories)
+    f1 = f1_score(y_pred=predicted_categories, y_true=test_labels, labels=all_categories, average='macro') # <--- FIX f1_score HERE
     print('f1 score: ', f1)
     
     return
-
-

@@ -18,7 +18,7 @@ from SVM import svm_classify
 
 
 # 'resnet18'
-FEATURE = 'bag of sift'
+FEATURE = 'resnet'
 CLASSIFIER = 'test all'  # options: 'nearest neighbor', 'support vector machine'
 
 data_path = data_path = '/home/wajeeha/Documents/scene-recognition-using-bow-and-resnet-WajeehaIlyas/data/'
@@ -55,7 +55,7 @@ print("Using", FEATURE, "representation for images\n")
 
 if FEATURE == 'resnet':
 
-        # Define transforms
+    # Define transforms
     transform = transforms.Compose([
         transforms.Resize((224,224)),
         transforms.ToTensor(),
@@ -67,26 +67,39 @@ if FEATURE == 'resnet':
     test_dataset  = CustomImageDataset(test_image_paths, test_labels, class_to_idx, transform=transform)
 
     # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True) #you can change batch size accordingly
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False) # Shuffle set to False for sequential feature extraction
     test_loader  = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
     print("Num classes:", len(categories))
     print("Train size:", len(train_dataset))
     print("Test size:", len(test_dataset))
 
-    print('getting feature maps from resnet')
+    print('Getting 512-D deep features from ResNet backbone...\n')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     resnet_model = Resnet('resnet18').to(device)
-    
-    with torch.no_grad():
-        for images, labels in train_loader:
-            images = images.to(device)
-            feats = resnet_model(images)  # [batch, 512]
-            # store these feature maps and corresponding labels to an array as they will be the input to your classifer
-            # these array will also be needed for tsne plot  
-    
-    #  tsne plot function is given in Resnet_Backbone.py as display_features
+    resnet_model.eval() # Set model to evaluation mode
 
+    # --- Feature Extraction Function ---
+    def extract_features(data_loader, model):
+        all_feats = []
+        with torch.no_grad():
+            for images, _ in data_loader:
+                images = images.to(device)
+                feats = model(images)  # [batch, 512]
+                all_feats.append(feats.cpu().numpy())
+        return np.concatenate(all_feats, axis=0)
+
+    # Extract Features for Training Set
+    train_image_feats = extract_features(train_loader, resnet_model)
+    print(f"Train features extracted: {train_image_feats.shape}")
+    
+    # Extract Features for Testing Set
+    test_image_feats = extract_features(test_loader, resnet_model)
+    print(f"Test features extracted: {test_image_feats.shape}\n")
+
+    if not os.path.exists('features'): os.makedirs('features')
+    np.save('features/resnet_train_feats.npy', train_image_feats)
+    np.save('features/resnet_test_feats.npy', test_image_feats)
 
 elif FEATURE == 'bag of sift':
     VOCAB_SIZE_FINAL = 20
@@ -95,7 +108,6 @@ elif FEATURE == 'bag of sift':
     if not os.path.exists('features'):
         os.makedirs('features')
 
-    # Build Vocabulary if it doesn't exist
     if not os.path.exists(VOCAB_PATH):
         print(f'No existing visual word vocabulary found at {VOCAB_PATH}. Computing one from training images\n')
         

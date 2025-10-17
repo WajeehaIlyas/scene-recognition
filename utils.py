@@ -7,23 +7,49 @@ import pandas as pd
 import os
 import glob
 
-
-
 def get_image_paths(data_path, categories):
+    # --- TRAINING SET: data/train/train/Category/ ---
     train_image_paths, train_labels = [], []
+    train_base_path = data_path + 'train/train/' 
+
     for cat in categories:
-        imgs = glob.glob(data_path+'train/'+cat+'/*.*')
+        search_path = train_base_path + cat + '/*'
+        
+        if os.path.isdir(train_base_path + cat):
+            # No need for this print if the code works, but keep for final confirmation
+            # print(f"DEBUG: Searching for train images in: {search_path}") 
+            pass
+        
+        imgs = glob.glob(search_path)
+            
         train_image_paths = train_image_paths + imgs
         train_labels = train_labels + [cat]*len(imgs)
 
+
+    # --- TESTING SET: data/test/test/Category/ ---
     test_image_paths, test_labels = [], []
-    for cat in os.listdir(data_path+'test/'):
-        imgs = glob.glob(data_path+'test/'+cat+'/*.*')
+    test_base_path = data_path + 'test/test/'
+    
+    # FIX: Only iterate over the folders that exist in the test set.
+    # This ensures we only look for images in the 4 folders (Bedroom, Highway, etc.)
+    # that are actually present inside data/test/test/
+    test_categories = os.listdir(test_base_path)
+    
+    for cat in test_categories: 
+        # Skip files/folders that are not the image categories
+        if cat not in categories: 
+            continue 
+            
+        search_path = test_base_path + cat + '/*' 
+        
+        # print(f"DEBUG: Searching for test images in: {search_path}")
+        
+        imgs = glob.glob(search_path)
+            
         test_image_paths = test_image_paths + imgs
         test_labels = test_labels + [cat]*len(imgs)
 
-    return np.array(train_image_paths), np.array(test_image_paths), np.array(train_labels), np.array(test_labels)  
-
+    return np.array(train_image_paths), np.array(test_image_paths), np.array(train_labels), np.array(test_labels)
 
 def plot_confusion_matrix(y_true, y_pred, classes, normalize=False, title=None, cmap=plt.cm.Blues):
     """
@@ -39,7 +65,7 @@ def plot_confusion_matrix(y_true, y_pred, classes, normalize=False, title=None, 
     # Compute confusion matrix
     cm = confusion_matrix(y_true, y_pred)
     # Only use the labels that appear in the data
-    classes = classes[unique_labels(y_true, y_pred)]
+    #classes = classes[unique_labels(y_true, y_pred)]
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         print("Normalized confusion matrix")
@@ -99,7 +125,7 @@ def display_results(test_labels, categories, predicted_categories):
         temp_y_test = (test_labels == el).astype(int)
         temp_preds = (predicted_categories == el).astype(int)
         row = [el]+ perf_measure(temp_y_test, temp_preds)
-        df = df.append(pd.Series(row, index=cols), ignore_index=True)
+        df = df._append(pd.Series(row, index=cols), ignore_index=True)
     print(df, '\n\n')
 
     for i in range(len(categories)):

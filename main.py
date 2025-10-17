@@ -1,12 +1,14 @@
 from DataLoader_Resnet import CustomImageDataset
 from Resnet_Backbone import Resnet
-from get_image_paths import get_image_paths  # your helper function
+from utils import get_image_paths, display_results  # your helper function
 import numpy as np
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 import pickle
 import utils
+import os
+from BOVW import build_vocabulary, get_bags_of_sifts, visualize_sift_keypoints, plot_histogram
 
 
 # =========================================================
@@ -18,7 +20,7 @@ import utils
 FEATURE = 'bag of sift'
 CLASSIFIER = 'placeholder'  # options: 'nearest neighbor', 'support vector machine'
 
-data_path = '../../data/'
+data_path = data_path = '/home/wajeeha/Documents/scene-recognition-using-bow-and-resnet-WajeehaIlyas/data/'
 
 categories = np.array([
     'Kitchen', 'Store', 'Bedroom', 'LivingRoom', 'Office',
@@ -86,16 +88,57 @@ if FEATURE == 'resnet':
 
 
 elif FEATURE == 'bag of sift':
-   
-    if(not exist('vocab.pkl', 'file')):
-        print('No existing visual word vocabulary found. Computing one from training images\n')
-        vocab_size = 200 #Larger values will work better (to a point) but be slower to compute
-        vocab = build_vocabulary(train_image_paths, vocab_size) #given in BOVW.py
-        save('vocab.mat', 'vocab')
+    VOCAB_SIZE_FINAL = 20
+    VOCAB_PATH = f'features/vocab_size_{VOCAB_SIZE_FINAL}.pkl'
+    
+    # Ensure the features directory exists for saving files
+    if not os.path.exists('features'):
+        os.makedirs('features')
+
+    # 2. Build Vocabulary if it doesn't exist
+    # Use os.path.exists to check for the .pkl file
+    if not os.path.exists(VOCAB_PATH):
+        print(f'No existing visual word vocabulary found at {VOCAB_PATH}. Computing one from training images\n')
+        
+        # NOTE: If you must test multiple vocab_sizes, you would loop here 
+        # or call build_vocabulary multiple times, saving each one.
+        vocab = build_vocabulary(train_image_paths, VOCAB_SIZE_FINAL) 
+        
+        # build_vocabulary already handles saving the .pkl file internally.
+        
+    else:
+        print(f'Loading existing visual word vocabulary from {VOCAB_PATH}\n')
      
-    # Code get_bags_of_sifts function
-    train_image_feats = get_bags_of_sifts(train_image_paths) #given in BOVW.py
-    test_image_feats  = get_bags_of_sifts(test_image_paths)
+    # 3. Code get_bags_of_sifts function (This will also save the 'all_sampled_descriptors_for_report.pkl')
+    # Pass the image paths AND the vocabulary path to your implemented function
+    train_image_feats = get_bags_of_sifts(train_image_paths, VOCAB_PATH) 
+    test_image_feats  = get_bags_of_sifts(test_image_paths, VOCAB_PATH)
+
+    if train_image_feats is None or train_image_feats.size == 0:
+        print("CRITICAL ERROR: Feature extraction failed. Cannot proceed to classification/results.")
+        # Avoid running the rest of the script that depends on features
+        exit()
+
+    # 4. Visualization for Report (Optional but required in the project description)
+    print("Generating sample visualizations for the report...")
+    
+    # A. Visualize SIFT keypoints for a sample image per class
+    # Get a single example path for each category for visualization
+    sample_paths = {}
+    for path, label in zip(train_image_paths, train_labels):
+        if label not in sample_paths:
+            sample_paths[label] = path
+            
+    # Visualize SIFT for one image per class (max 15 images)
+    for label, path in sample_paths.items():
+        visualize_sift_keypoints(path)
+        
+    # B. Plot Histograms for a few sample images (e.g., the first from each set)
+    # Ensure train_image_feats and test_image_feats are not None
+    if train_image_feats is not None:
+        plot_histogram(train_image_feats[0], train_labels[0], VOCAB_SIZE_FINAL, 'results/histograms_train_0')
+    if test_image_feats is not None:
+        plot_histogram(test_image_feats[0], test_labels[0], VOCAB_SIZE_FINAL, 'results/histograms_test_0')
    
 
 elif FEATURE == 'placeholder':
